@@ -103,6 +103,17 @@ function _taxonomy_menu_trails_alter_bundle_form(&$form, $entity_type, $bundle) 
           'deepest-in-menu' => t('Deepest in menu'),
         ),
       ),
+      'multiple_menu' => array(
+        '#type' => 'select',
+        '#title' => t("Multiple menu trail"),
+        '#description' => t("<ul><li><b>All</b> - expand menu items in all menu</li><li><b>First</b> - expand menu items in lightweight menu</li><li><b>Last</b> - expand menu items in heavyweight menu</li></ul>"),
+        '#default_value' => isset($settings['multiple_menu']) ? $settings['multiple_menu'] : 'all',
+        '#options' => array(
+          'all' => t("All"),
+          'first' => t("First"),
+          'last' => t("Last"),
+        ),
+      ),
       'terms_with_current_language' => module_exists('i18n_taxonomy') ? array(
         '#type' => 'checkbox',
         '#title' => t("Allow only terms with the current language"),

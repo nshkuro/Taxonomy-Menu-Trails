@@ -171,18 +171,18 @@ function _taxonomy_menu_trails_process($entity, $settings) {
   $results = $query->execute();
 
   $selected_item = FALSE;
-  $vars = compact('menu_names', 'results', 'paths', 'selected_item');
+  $vars = compact('menu_names', 'results', 'paths', 'selected_items', 'settings');
   switch ($settings['selection_method']) {
     case 'first':
     case 'last':
-      $selected_item = _taxonomy_menu_trails_fetch_link_simple($vars);
+      $selected_items = _taxonomy_menu_trails_fetch_link_simple($vars);
       break;
     case 'deepest-in-menu':
-      $selected_item = _taxonomy_menu_trails_fetch_link_deepest($vars);
+      $selected_items = _taxonomy_menu_trails_fetch_link_deepest($vars);
       break;
   }
-  
-  if (!$selected_item) {
+
+  if (!$selected_items) {
     return;
   }
 
@@ -190,14 +190,19 @@ function _taxonomy_menu_trails_process($entity, $settings) {
   // Function menu_tree_set_path() available since Drupal 7.9, so we should
   // check it exists.
   if (function_exists('menu_tree_set_path')) {
-    menu_tree_set_path($selected_item['menu_name'], $selected_item['link_path']);
+    foreach($selected_items as $selected_item) {
+      menu_tree_set_path($selected_item['menu_name'], $selected_item['link_path']);
+    }
+  //
   }
   
   // Save selected item and "set_breadcrumb" setting for
   // taxonomy_menu_trails_menu_breadcrumb_alter().
   if (!empty($settings['set_breadcrumb'])) {
-    $selected_item['set_breadcrumb'] = $settings['set_breadcrumb'];
-    taxonomy_menu_trails_selected_item_for_breadcrumb($selected_item);
+    foreach($selected_items as $selected_item) {
+      $selected_item['set_breadcrumb'] = $settings['set_breadcrumb'];
+      taxonomy_menu_trails_selected_item_for_breadcrumb($selected_item);
+    }
   }
   
   // TODO: Remove workaround when Menu Block will remove its
@@ -207,7 +212,9 @@ function _taxonomy_menu_trails_process($entity, $settings) {
   if (module_exists('menu_block')) {
     // Also set preferred item for Menu Block module
     $mb_preferred_links = &drupal_static('_menu_link_get_preferred');
-    $mb_preferred_links[$_GET['q']][$selected_item['menu_name']] = $selected_item;
+    foreach($selected_items as $selected_item) {
+      $mb_preferred_links[$_GET['q']][$selected_item['menu_name']] = $selected_item;
+    }
   }
 }
 
@@ -226,7 +233,7 @@ function _taxonomy_menu_trails_process($entity, $settings) {
  */
 function _taxonomy_menu_trails_fetch_link_simple($vars) {
   extract($vars);
-  
+
   // Sort candidates by link path and menu name.
   $candidates = array();
   foreach ($results as $candidate) {
@@ -241,29 +248,52 @@ function _taxonomy_menu_trails_fetch_link_simple($vars) {
       }
     }
   }
-  
-  if (!empty($candidates)) {
+
+  // processing array according on saved settings
+  $processed_candidates = array();
+
+  switch($settings['multiple_menu']) {
+    default:
+    case 'all':
+      $processed_candidates = $candidates;
+      break;
+
+    case 'first':
+      foreach($candidates as $k => $v) {
+        array_pop($v); // unset last array item
+        $processed_candidates[$k] = $v;
+      }
+      break;
+
+    case 'last':
+      foreach($candidates as $k => $v) {
+        array_shift($v); // unset last array item
+        $processed_candidates[$k] = $v;
+      }
+      break;
+  }
+
+  if (!empty($processed_candidates)) {
     // Pick the most specific link, in the most preferred menu.
     foreach ($paths as $link_path) {
-      if (!isset($candidates[$link_path])) {
+      if (!isset($processed_candidates[$link_path])) {
         continue;
       }
       foreach ($menu_names as $menu_name) {
-        if (!isset($candidates[$link_path][$menu_name])) {
+        if (!isset($processed_candidates[$link_path][$menu_name])) {
           continue;
         }
-        $candidate_item = $candidates[$link_path][$menu_name];
+
+        $candidate_item = $processed_candidates[$link_path][$menu_name];
         $map = explode('/', $link_path);
         _menu_translate($candidate_item, $map);
         if ($candidate_item['access']) {
-          $selected_item = $candidate_item;
-          break 2;
+          $selected_items[] = $candidate_item;
         }
       }
     }
   }
-
-  return $selected_item;
+  return $selected_items;
 }
 
 /**
@@ -290,7 +320,18 @@ function _taxonomy_menu_trails_fetch_link_deepest($vars) {
       }
     }
   }
-  
+
+  // processing array according on saved settings
+  switch($settings['multiple_menu']) {
+    case 'first':
+      array_pop($candidates);
+      break;
+
+    case 'last':
+      array_shift($candidates);
+      break;
+  }
+
   if (!empty($candidates)) {
     foreach ($menu_names as $menu_name) {
       if (!empty($candidates[$menu_name])) {
@@ -298,15 +339,14 @@ function _taxonomy_menu_trails_fetch_link_deepest($vars) {
           $map = explode('/', $candidate_item['link_path']);
           _menu_translate($candidate_item, $map);
           if ($candidate_item['access']) {
-            $selected_item = $candidate_item;
-            break 2;
+            $selected_items[] = $candidate_item;
           }
         }
       }
     }
   }
 
-  return $selected_item;
+  return $selected_items;
 }
 
 /**
